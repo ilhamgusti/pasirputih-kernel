@@ -43,6 +43,12 @@ starts from `configs/microvm-kernel-ci-<arch>-6.1.config`, merges
 make it into the final config (a missing dependency would drop it silently).
 `uname -r` is `<kernel version>-pp<PP_REV>`.
 
+`VARIANT=android ./build.sh` adds `configs/android.config` on top (Binder
+with binder/hwbinder/vndbinder and binderfs, DRM + vgem, udmabuf, dma-buf
+heaps, sw_sync, iptables NAT/mangle, uinput: Android in a sandbox with
+Waydroid): `vmlinux-<version>-pp<PP_REV>-android-<arch>`. pasirputih finds it
+next to the default kernel (`pp sandbox create -kernel android`).
+
 CI builds both architectures on every push; a `v*` tag publishes a release.
 
 ## Sources
