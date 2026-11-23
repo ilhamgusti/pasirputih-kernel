@@ -4,6 +4,8 @@
 # configs/pasirputih.config.
 #
 #   ./build.sh [aarch64|x86_64]     (default: this machine's arch)
+#   VARIANT=android ./build.sh      + configs/android.config (Binder, vgem...):
+#                                   uname -r <version>-pp<PP_REV>-android
 #
 # Output in out/ (OUT=...):
 #   vmlinux-<version>-<arch>        the kernel Firecracker boots (arm64: Image)
@@ -24,11 +26,18 @@ aarch64 | arm64) arch=aarch64 karch=arm64 target=Image image=arch/arm64/boot/Ima
 x86_64 | amd64) arch=x86_64 karch=x86_64 target=vmlinux image=vmlinux ;;
 *) echo "unsupported arch $arch" >&2; exit 2 ;;
 esac
-version=$KERNEL_VERSION-pp$PP_REV
+variant=${VARIANT:-}
+suffix=-pp$PP_REV${variant:+-$variant}
+version=$KERNEL_VERSION$suffix
+fragments=("$here/configs/pasirputih.config")
+if [ -n "$variant" ]; then
+	[ -f "$here/configs/$variant.config" ] || { echo "no configs/$variant.config" >&2; exit 2; }
+	fragments+=("$here/configs/$variant.config")
+fi
 out=${OUT:-$here/out}
 work=${WORK:-$here/build}
 jobs=${JOBS:-$(nproc)}
-src=$work/linux-$KERNEL_VERSION-$arch
+src=$work/linux-$KERNEL_VERSION-$arch${variant:+-$variant}
 mkdir -p "$work" "$out"
 
 tarball=$work/linux-$KERNEL_VERSION.tar.xz
@@ -48,8 +57,8 @@ fi
 echo ">> config"
 cp "$here/configs/microvm-kernel-ci-$arch-6.1.config" "$src/.config"
 mk() { make -C "$src" ARCH=$karch ${CROSS_COMPILE:+CROSS_COMPILE=$CROSS_COMPILE} "$@"; }
-(cd "$src" && ARCH=$karch scripts/kconfig/merge_config.sh -m -O "$src" .config "$here/configs/pasirputih.config" > /dev/null)
-"$src/scripts/config" --file "$src/.config" --set-str LOCALVERSION "-pp$PP_REV" --disable LOCALVERSION_AUTO
+(cd "$src" && ARCH=$karch scripts/kconfig/merge_config.sh -m -O "$src" .config "${fragments[@]}" > /dev/null)
+"$src/scripts/config" --file "$src/.config" --set-str LOCALVERSION "$suffix" --disable LOCALVERSION_AUTO
 mk -s olddefconfig
 # Every line of the fragment must have survived olddefconfig (a missing
 # dependency silently drops an option).
@@ -60,7 +69,7 @@ while IFS= read -r line; do
 		echo "!! $line did not stick: $(grep -E "^(# )?${line%%=*}[= ]" "$src/.config" || echo absent)" >&2
 		missing=1
 	fi
-done < "$here/configs/pasirputih.config"
+done < <(cat "${fragments[@]}")
 [ $missing = 0 ] || exit 1
 
 echo ">> build $target with $jobs jobs"
